@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process;
 
 use cosmic::app::Core;
@@ -9,6 +9,7 @@ use cosmic::cosmic_theme::Spacing;
 use cosmic::iced::wayland::popup::{destroy_popup, get_popup};
 use cosmic::iced::window::Id;
 use cosmic::iced::{Command, Limits};
+#[allow(unused_imports)]
 use cosmic::iced_core::{Alignment, Length};
 use cosmic::iced_futures::Subscription;
 use cosmic::iced_runtime::core::window;
@@ -184,6 +185,7 @@ impl cosmic::Application for Window {
     }
 
     fn view(&self) -> Element<Self::Message> {
+        // all need padding to match the icons
         cosmic::widget::button(widget::text("Places").size(14.0))
             .style(cosmic::theme::Button::AppletIcon)
             .on_press(Message::TogglePopup)
@@ -204,30 +206,25 @@ impl cosmic::Application for Window {
 
         for (path, name) in &self.special_dirs_vec {
             let icon = if name == "Trash" {
-                widget::icon::from_name("user-trash-full-symbolic")
-                    .size(16)
-                    .into()
+                "user-trash-full-symbolic"
             } else {
-                self.folder_icon(&path)
+                self.special_dirs_map.get(path).map_or("folder", |x| x)
             };
+            let icon = widget::icon::Named::new(icon);
             let open_loc = if name == "Trash" {
                 Location::Trash
             } else {
                 Location::Path(path.to_owned())
             };
-            let row = widget::row::with_children(vec![
-                icon,
-                widget::text(name.clone()).width(Length::Fill).into(),
-            ])
-            .align_items(Alignment::Center)
-            .spacing(space_xxs);
-            let btn = widget::button(row)
+
+            let btn = widget::button::icon(icon)
+                .label(name.clone())
                 .on_press(Message::Open(open_loc))
-                .style(cosmic::theme::Button::HeaderBar);
+                .extra_small()
+                .width(Length::Fill);
+
             // todo dynamic sizing
-            let container = widget::container(btn)
-                .width(Length::Fill)
-                .padding([space_xxxs, space_xxs]);
+            let container = widget::container(btn).width(200);
             content_list = content_list.push(container);
         }
 
@@ -253,13 +250,5 @@ impl cosmic::Application for Window {
 
     fn style(&self) -> Option<<Theme as application::StyleSheet>::Style> {
         Some(cosmic::applet::style())
-    }
-}
-
-impl Window {
-    fn folder_icon(&self, path: &Path) -> Element<Message> {
-        widget::icon::from_name(self.special_dirs_map.get(path).map_or("folder", |x| x))
-            .size(16)
-            .into()
     }
 }
