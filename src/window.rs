@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use cosmic::app::Core;
+use cosmic::applet::cosmic_panel_config::PanelAnchor;
 use cosmic::cosmic_theme::Spacing;
 use cosmic::iced::wayland::popup::{destroy_popup, get_popup};
 use cosmic::iced::window::Id;
@@ -167,6 +168,7 @@ impl cosmic::Application for Window {
                     self.popup = None;
                 }
             }
+
             Message::Open(path) => {
                 let arg = match path {
                     Location::Trash => Cow::from(OsStr::new("--trash")),
@@ -184,10 +186,25 @@ impl cosmic::Application for Window {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        cosmic::widget::button(widget::text("Places").size(14.0))
-            .style(cosmic::theme::Button::AppletIcon)
-            .on_press(Message::TogglePopup)
-            .into()
+        if self.config.show_icon
+            || matches!(
+                self.core.applet.anchor,
+                PanelAnchor::Left | PanelAnchor::Right
+            )
+        {
+            self.core
+                .applet
+                .icon_button("com.system76.CosmicFiles")
+                .on_press(Message::TogglePopup)
+                .into()
+        } else {
+            let padding = self.core.applet.suggested_padding(true);
+            widget::button(widget::text("Places").size(14.0))
+                .on_press(Message::TogglePopup)
+                .padding([padding / 2, padding])
+                .style(cosmic::theme::Button::AppletIcon)
+                .into()
+        }
     }
 
     fn view_window(&self, _id: Id) -> Element<Self::Message> {

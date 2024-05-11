@@ -9,6 +9,7 @@ pub const CONFIG_VERSION: u64 = 1;
 pub struct Config {
     pub special_dirs: SpecialDirsList,
     pub file_manager: Box<str>,
+    pub show_icon: bool,
 }
 
 impl Default for Config {
@@ -16,6 +17,7 @@ impl Default for Config {
         Self {
             special_dirs: vec![],
             file_manager: Box::from("cosmic-files"),
+            show_icon: true,
         }
     }
 }

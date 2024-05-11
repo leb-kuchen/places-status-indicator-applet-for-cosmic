@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=Cosmic Applet Places Status Indicator
+Name=Places Status Indicator
 Comment=A menu for quickly navigating places in the system.
 Type=Application
 Exec=cosmic-applet-places-status-indicator
@@ -7,7 +7,7 @@ Terminal=false
 Categories=Cosmic;Iced;
 Keywords=Cosmic;Iced;
 # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
-Icon=com.system76.CosmicFiles
+Icon=com.system76.CosmicFiles-symbolic
 StartupNotify=true
 NoDisplay=true
 X-CosmicApplet=true
