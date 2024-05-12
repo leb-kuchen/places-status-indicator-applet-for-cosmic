@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process;
 
 use cosmic::app::Core;
@@ -10,56 +10,59 @@ use cosmic::cosmic_theme::Spacing;
 use cosmic::iced::wayland::popup::{destroy_popup, get_popup};
 use cosmic::iced::window::Id;
 use cosmic::iced::{Command, Limits};
+#[allow(unused_imports)]
 use cosmic::iced_core::{Alignment, Length};
 use cosmic::iced_futures::Subscription;
 use cosmic::iced_runtime::core::window;
 use cosmic::iced_style::application;
-use cosmic::widget::{self};
+use cosmic::widget::menu::action::MenuAction;
+use cosmic::widget::segmented_button::Entity;
+use cosmic::widget::{self, segmented_button};
 use cosmic::{cosmic_config, Element, Theme};
+use once_cell::sync::Lazy;
 
-use crate::config::{Config, CONFIG_VERSION};
+use crate::config::{
+    Config, Favorite, FilesConfig, CONFIG_VERSION, FILES_CONFIG_VERSION, FILES_ID,
+};
 
 pub const ID: &str = "dev.dominiccgeh.CosmicAppletPlacesStatusIndicator";
 
-type SpecialDirsMap = HashMap<PathBuf, &'static str>;
-pub type SpecialDirsList = Vec<(PathBuf, String)>;
-
-fn load_dirs() -> (SpecialDirsMap, SpecialDirsList) {
-    let cap = 10;
-    let mut special_dirs = Vec::with_capacity(cap);
-    let mut special_dirs_map = HashMap::with_capacity(cap);
-    for (dir_opt, dir_icon) in vec![
-        // todo configure vec config
-        (dirs::public_dir(), "folder-publicshare"),
-        (dirs::document_dir(), "folder-documents"),
-        (dirs::template_dir(), "folder-template"),
-        (dirs::home_dir(), "user-home"),
-        (dirs::desktop_dir(), "user-desktop"),
-        (dirs::download_dir(), "folder-download"),
-        (dirs::audio_dir(), "folder-music"),
-        (dirs::picture_dir(), "folder-pictures"),
-        (dirs::video_dir(), "folder-videos"),
-    ] {
-        if let Some(dir) = dir_opt {
-            let Some(file_name) = dir.file_name().and_then(|x| x.to_str()) else {
-                continue;
-            };
-            let file_name = file_name.to_owned();
-            special_dirs.push((dir.clone(), file_name));
-            special_dirs_map.insert(dir, dir_icon);
-        }
+static SPECIAL_DIRS: Lazy<HashMap<PathBuf, &'static str>> = Lazy::new(|| {
+    let mut special_dirs = HashMap::new();
+    if let Some(dir) = dirs::document_dir() {
+        special_dirs.insert(dir, "folder-documents");
     }
-    special_dirs.push((PathBuf::from(""), "Trash".to_owned()));
-    special_dirs.push((PathBuf::from("/"), "Filesystem".to_owned()));
-    special_dirs_map.insert(PathBuf::from("/"), "drive-harddisk-system-symbolic");
-    special_dirs.sort_by(|a, b| a.1.cmp(&b.1));
-    (special_dirs_map, special_dirs)
-}
+    if let Some(dir) = dirs::download_dir() {
+        special_dirs.insert(dir, "folder-download");
+    }
+    if let Some(dir) = dirs::audio_dir() {
+        special_dirs.insert(dir, "folder-music");
+    }
+    if let Some(dir) = dirs::picture_dir() {
+        special_dirs.insert(dir, "folder-pictures");
+    }
+    if let Some(dir) = dirs::public_dir() {
+        special_dirs.insert(dir, "folder-publicshare");
+    }
+    if let Some(dir) = dirs::template_dir() {
+        special_dirs.insert(dir, "folder-templates");
+    }
+    if let Some(dir) = dirs::video_dir() {
+        special_dirs.insert(dir, "folder-videos");
+    }
+    if let Some(dir) = dirs::desktop_dir() {
+        special_dirs.insert(dir, "user-desktop");
+    }
+    if let Some(dir) = dirs::home_dir() {
+        special_dirs.insert(dir, "user-home");
+    }
+    special_dirs
+});
 
-#[derive(Clone, Debug)]
 pub struct Flags {
     pub config_handler: Option<cosmic_config::Config>,
     pub config: Config,
+    pub files_config: FilesConfig,
 }
 
 pub struct Window {
@@ -68,16 +71,17 @@ pub struct Window {
     config: Config,
     #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
-    special_dirs_map: SpecialDirsMap,
-    special_dirs_vec: SpecialDirsList,
+    files_config: FilesConfig,
+    nav_model: segmented_button::SingleSelectModel,
 }
 
 #[derive(Clone, Debug)]
 pub enum Message {
     TogglePopup,
     PopupClosed(Id),
-    Open(Location),
+    FilesConfig(FilesConfig),
     Config(Config),
+    NavModelSelected(segmented_button::Entity),
 }
 #[derive(Debug, Clone)]
 pub enum Location {
@@ -103,15 +107,15 @@ impl cosmic::Application for Window {
         core: Core,
         flags: Self::Flags,
     ) -> (Self, Command<cosmic::app::Message<Self::Message>>) {
-        let (special_dirs_map, special_dirs_vec) = load_dirs();
-        let window = Window {
+        let mut window = Window {
             config: flags.config,
             config_handler: flags.config_handler,
             core,
-            special_dirs_map,
-            special_dirs_vec,
+            files_config: flags.files_config,
             popup: None,
+            nav_model: segmented_button::ModelBuilder::default().build(),
         };
+        window.update_nav_model();
         (window, Command::none())
     }
 
@@ -169,18 +173,36 @@ impl cosmic::Application for Window {
                 }
             }
 
-            Message::Open(path) => {
-                let arg = match path {
-                    Location::Trash => Cow::from(OsStr::new("--trash")),
-                    Location::Path(path) => Cow::from(path.into_os_string()),
-                };
-                _ = process::Command::new("cosmic-files").arg(arg).spawn();
-            }
             Message::Config(config) => {
                 if config != self.config {
                     self.config = config
                 }
             }
+            Message::FilesConfig(config) => {
+                if config != self.files_config {
+                    self.files_config = config;
+                    self.update_nav_model()
+                }
+            }
+            Message::NavModelSelected(id) => {
+                if let Some(path) = self.nav_model.data::<Location>(id) {
+                    let arg = match path {
+                        Location::Trash => Cow::from(OsStr::new("--trash")),
+                        Location::Path(path) => Cow::from(path.clone().into_os_string()),
+                    };
+                    _ = process::Command::new("cosmic-files").arg(arg).spawn();
+                }
+            } // Message::RemoveFavorite(entity) => {
+              //     if let Some(FavoriteIndex(favorite_i)) =
+              //         self.nav_model.data::<FavoriteIndex>(entity)
+              //     {
+              //         let mut favorites = self.files_config.favorites.clone();
+              //         favorites.remove(*favorite_i);
+              //         // config_set!(favorites, favorites);
+              //         self.files_config.favorites = favorites;
+              //         self.update_nav_model();
+              //     }
+              // }
         }
         Command::none()
     }
@@ -210,49 +232,32 @@ impl cosmic::Application for Window {
     fn view_window(&self, _id: Id) -> Element<Self::Message> {
         #[allow(unused_variables)]
         let Spacing {
+            space_s,
             space_xs,
             space_xxs,
             space_xxxs,
             ..
         } = self.core.system_theme().cosmic().spacing;
 
-        let mut content_list =
-            widget::column::with_capacity(self.special_dirs_vec.len()).padding([8, 0]);
+        let mut content_list = widget::column().padding([8, 0]);
 
-        for (path, name) in &self.special_dirs_vec {
-            let icon = if name == "Trash" {
-                widget::icon::from_name("user-trash-full-symbolic")
-                    .size(16)
-                    .into()
-            } else {
-                self.folder_icon(&path)
-            };
-            let open_loc = if name == "Trash" {
-                Location::Trash
-            } else {
-                Location::Path(path.to_owned())
-            };
-            let row = widget::row::with_children(vec![
-                icon,
-                widget::text(name.clone()).width(Length::Fill).into(),
-            ])
-            .align_items(Alignment::Center)
-            .spacing(space_xxs);
-            let btn = widget::button(row)
-                .on_press(Message::Open(open_loc))
-                .style(cosmic::theme::Button::HeaderBar);
-            // todo dynamic sizing
-            let container = widget::container(btn)
-                .width(Length::Fill)
-                .padding([space_xxxs, space_xxs]);
-            content_list = content_list.push(container);
-        }
+        let nav = segmented_button::vertical(&self.nav_model)
+            .on_activate(Message::NavModelSelected)
+            .button_height(32)
+            .button_padding([space_s, space_xxs, space_s, space_xxs])
+            .button_spacing(space_xxs)
+            .spacing(space_xxs)
+            .style(cosmic::theme::SegmentedButton::TabBar);
+
+        content_list = content_list.push(nav);
 
         self.core.applet.popup_container(content_list).into()
     }
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ConfigSubscription;
-        return cosmic_config::config_subscription(
+        struct FilesConfigSubscription;
+
+        let config_sub = cosmic_config::config_subscription(
             std::any::TypeId::of::<ConfigSubscription>(),
             Self::APP_ID.into(),
             CONFIG_VERSION,
@@ -266,6 +271,21 @@ impl cosmic::Application for Window {
             }
             Message::Config(update.config)
         });
+        let files_config_sub = cosmic_config::config_subscription(
+            std::any::TypeId::of::<FilesConfigSubscription>(),
+            FILES_ID.into(),
+            FILES_CONFIG_VERSION,
+        )
+        .map(|update| {
+            if !update.errors.is_empty() {
+                eprintln!(
+                    "errors loading config {:?}: {:?}",
+                    update.keys, update.errors
+                );
+            }
+            Message::FilesConfig(update.config)
+        });
+        Subscription::batch([config_sub, files_config_sub])
     }
 
     fn style(&self) -> Option<<Theme as application::StyleSheet>::Style> {
@@ -273,10 +293,63 @@ impl cosmic::Application for Window {
     }
 }
 
+struct FavoriteIndex(usize);
 impl Window {
-    fn folder_icon(&self, path: &Path) -> Element<Message> {
-        widget::icon::from_name(self.special_dirs_map.get(path).map_or("folder", |x| x))
-            .size(16)
-            .into()
+    fn update_nav_model(&mut self) {
+        let mut nav_model = segmented_button::ModelBuilder::default();
+        for (favorite_i, favorite) in self.files_config.favorites.iter().enumerate() {
+            if let Some(path) = favorite.path_opt() {
+                let name = if matches!(favorite, Favorite::Home) {
+                    "Home".to_string()
+                } else if let Some(file_name) = path.file_name().and_then(|x| x.to_str()) {
+                    file_name.to_string()
+                } else {
+                    continue;
+                };
+                nav_model = nav_model.insert(move |b| {
+                    b.text(name.clone())
+                        .icon(
+                            widget::icon::icon(if path.is_dir() {
+                                folder_icon_symbolic(&path, 16)
+                            } else {
+                                widget::icon::from_name("text-x-generic-symbolic")
+                                    .size(16)
+                                    .handle()
+                            })
+                            .size(16),
+                        )
+                        .data(Location::Path(path.clone()))
+                        .data(FavoriteIndex(favorite_i))
+                });
+            }
+        }
+        nav_model = nav_model.insert(|b| {
+            b.text("Trash".to_string())
+                .icon(widget::icon::icon(trash_icon_symbolic(16)))
+                .data(Location::Trash)
+        });
+        self.nav_model = nav_model.build();
     }
+}
+
+pub fn folder_icon_symbolic(path: &PathBuf, icon_size: u16) -> widget::icon::Handle {
+    widget::icon::from_name(format!(
+        "{}-symbolic",
+        SPECIAL_DIRS.get(path).map_or("folder", |x| *x)
+    ))
+    .size(icon_size)
+    .handle()
+}
+pub fn trash_icon_symbolic(icon_size: u16) -> widget::icon::Handle {
+    let full = match trash::os_limited::list() {
+        Ok(entries) => !entries.is_empty(),
+        Err(_err) => false,
+    };
+    widget::icon::from_name(if full {
+        "user-trash-full-symbolic"
+    } else {
+        "user-trash-symbolic"
+    })
+    .size(icon_size)
+    .handle()
 }
