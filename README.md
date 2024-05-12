@@ -3,8 +3,8 @@
 
 # Install
 ```sh
-git clone github.com/leb-kuchen/cosmic-applet-places-status-indicator
-cosmic-applet-places-status-indicator
+git clone htpps://github.com/leb-kuchen/cosmic-applet-places-status-indicator
+cd cosmic-applet-places-status-indicator
 cargo b -r
 sudo just install
 ```
