@@ -9,7 +9,7 @@ cargo b -r
 sudo just install
 ```
 # Dependencies
-(all may not be required)
+(some may not be required)
 ```
 Build-Depends:
   debhelper (>= 11),
