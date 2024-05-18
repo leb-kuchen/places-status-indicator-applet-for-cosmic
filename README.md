@@ -8,3 +8,21 @@ cd cosmic-applet-places-status-indicator
 cargo b -r
 sudo just install
 ```
+# Dependencies
+(all may not be required)
+```
+Build-Depends:
+  debhelper (>= 11),
+  debhelper-compat (= 11),
+  rustc ,
+  cargo,
+  libdbus-1-dev,
+  libegl-dev,
+  libpulse-dev,
+  libudev-dev,
+  libxkbcommon-dev,
+  libwayland-dev,
+  libinput-dev,
+  just,
+  pkg-config,
+```
