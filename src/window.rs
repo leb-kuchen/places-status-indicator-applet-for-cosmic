@@ -292,7 +292,6 @@ impl cosmic::Application for Window {
         Some(cosmic::applet::style())
     }
 }
-
 struct FavoriteIndex(usize);
 impl Window {
     fn update_nav_model(&mut self) {
