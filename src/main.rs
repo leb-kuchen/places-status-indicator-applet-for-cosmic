@@ -48,5 +48,5 @@ fn main() -> cosmic::iced::Result {
         config_handler,
         config,
     };
-    cosmic::applet::run::<Window>(true, flags)
+    cosmic::applet::run::<Window>(flags)
 }
